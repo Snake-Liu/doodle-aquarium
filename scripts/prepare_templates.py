@@ -128,6 +128,8 @@ def main() -> None:
     root = Path(__file__).resolve().parent.parent
     out_dir = root / "public" / "templates"
     out_dir.mkdir(parents=True, exist_ok=True)
+    debug_dir = root / "scripts" / "generated"
+    debug_dir.mkdir(parents=True, exist_ok=True)
     ts_data_dir = root / "src" / "domain" / "generated"
     ts_data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -151,11 +153,11 @@ def main() -> None:
         hi_rgba[:, :, 3] = hi_alpha
         Image.fromarray(hi_rgba, mode="RGBA").save(out_dir / f"{species_id}-outline.png")
 
-        # Save 384x384 transparent outline + mask preview PNGs for visual inspection
+        # Save 384x384 transparent outline + mask PNGs in scripts/generated/ for demo generation & inspection
         canon_rgba = np.zeros((CANONICAL_SIZE, CANONICAL_SIZE, 4), dtype=np.uint8)
         canon_rgba[:, :, 3] = outline_alpha
-        Image.fromarray(canon_rgba, mode="RGBA").save(out_dir / f"{species_id}-canon-outline.png")
-        Image.fromarray((mask_arr * 255).astype(np.uint8), mode="L").save(out_dir / f"{species_id}-mask.png")
+        Image.fromarray(canon_rgba, mode="RGBA").save(debug_dir / f"{species_id}-canon-outline.png")
+        Image.fromarray((mask_arr * 255).astype(np.uint8), mode="L").save(debug_dir / f"{species_id}-mask.png")
 
         # Quantize outline alpha to 4 levels (0..3 -> 0, 85, 170, 255) for super compact RLE
         q_alpha = ((outline_alpha.astype(np.int32) + 42) // 85).clip(0, 3).astype(np.uint8)

@@ -10,7 +10,6 @@ export default defineConfig(({ mode }) => ({
     ...(mode === 'https' ? [basicSsl()] : []),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/icon-192.png', 'icons/icon-512.png', 'templates/*-outline.png'],
       manifest: {
         name: '塗鴉水族箱',
         short_name: '塗鴉水族箱',

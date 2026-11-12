@@ -67,8 +67,8 @@ def main() -> None:
     for sid in ("clownfish", "turtle", "jellyfish"):
         entry = masks[sid]
         size = entry["size"]
-        mask_arr = np.array(Image.open(root / "public" / "templates" / f"{sid}-mask.png").convert("L")) > 127
-        outline_img = Image.open(root / "public" / "templates" / f"{sid}-canon-outline.png").convert("RGBA")
+        mask_arr = np.array(Image.open(root / "scripts" / "generated" / f"{sid}-mask.png").convert("L")) > 127
+        outline_img = Image.open(root / "scripts" / "generated" / f"{sid}-canon-outline.png").convert("RGBA")
         outline_arr = np.array(outline_img)[:, :, 3]
         out_path = demo_dir / f"demo-{sid}.png"
         make_crayon_texture(sid, size, entry["cropRect"], mask_arr, outline_arr, out_path)

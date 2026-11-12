@@ -20,6 +20,9 @@ npm test
 
 # 產出純靜態網頁與 PWA 離線快取（輸出於 dist/）
 npm run build
+
+# 產出正式 Release 靜態部署包（輸出於 release/）
+npm run build:release
 ```
 
 ## 專案資源與文件
