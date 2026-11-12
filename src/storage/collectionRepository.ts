@@ -10,9 +10,14 @@ export interface PersistedAquariumState {
   readonly demoCleared: boolean;
 }
 
+export interface SaveStateResult {
+  readonly persisted: boolean;
+  readonly quotaExceeded: boolean;
+}
+
 export interface CollectionRepository {
   loadState(): Promise<PersistedAquariumState>;
-  saveState(state: PersistedAquariumState): Promise<void>;
+  saveState(state: PersistedAquariumState): Promise<SaveStateResult>;
 }
 
 const DEFAULT_DB_NAME = 'doodle-aquarium-db';
@@ -83,7 +88,7 @@ export function createIndexedDbRepository(
       }
     },
 
-    async saveState(state: PersistedAquariumState): Promise<void> {
+    async saveState(state: PersistedAquariumState): Promise<SaveStateResult> {
       const sanitized: PersistedAquariumState = {
         creatures: state.creatures.filter((c) => !c.isDemo),
         activeCapacity: clampCapacity(state.activeCapacity),
@@ -91,20 +96,29 @@ export function createIndexedDbRepository(
       };
       memoryFallback = sanitized;
       if (!factory) {
-        return;
+        return { persisted: false, quotaExceeded: false };
       }
-      const db = await openDb();
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        store.put(sanitized, STATE_KEY);
-        tx.oncomplete = () => {
-          db.close();
-          resolve();
+      try {
+        const db = await openDb();
+        await new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, 'readwrite');
+          const store = tx.objectStore(STORE_NAME);
+          store.put(sanitized, STATE_KEY);
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error ?? new Error('Failed to save state'));
+          tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+        });
+        return { persisted: true, quotaExceeded: false };
+      } catch (err) {
+        const name = err instanceof Error ? err.name : '';
+        return {
+          persisted: false,
+          quotaExceeded: name === 'QuotaExceededError',
         };
-        tx.onerror = () => reject(tx.error ?? new Error('Failed to save state'));
-        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
-      });
+      }
     },
   };
 }

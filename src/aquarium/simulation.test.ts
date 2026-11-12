@@ -63,9 +63,9 @@ describe('Aquarium simulation seam', () => {
   it('attracts nearby creatures to fish feed, consumes eaten pellets, and expires uneaten ones', () => {
     const sim = createAquariumSimulation(800, 600);
     syncSimulationCreatures(sim, [makeCreature('f1', 'clownfish')]);
-    const fish = sim.actors[0]!;
-    fish.x = 200;
-    fish.y = 300;
+    const clownfish = sim.actors[0]!;
+    clownfish.x = 200;
+    clownfish.y = 300;
 
     dropFeed(sim, 310, 300, 1);
     expect(sim.pellets).toHaveLength(1);
@@ -80,9 +80,9 @@ describe('Aquarium simulation seam', () => {
     expect(eaten).toBe(1);
     expect(sim.pellets).toHaveLength(0);
 
-    // Pellet dropped far from any fish expires after ~10s
-    fish.x = 50;
-    fish.y = 50;
+    // Pellet dropped far from any creature expires after ~10s
+    clownfish.x = 50;
+    clownfish.y = 50;
     dropFeed(sim, 760, 100, 1);
     expect(sim.pellets).toHaveLength(1);
     for (let i = 0; i < 360; i++) {
@@ -91,14 +91,31 @@ describe('Aquarium simulation seam', () => {
     expect(sim.pellets).toHaveLength(0);
   });
 
-  it('triggers tap reaction and gives newly synced creatures an entry animation', () => {
+  it('triggers distinct species tap reactions and gives newly synced creatures an entry animation', () => {
     const sim = createAquariumSimulation(600, 500);
-    syncSimulationCreatures(sim, [makeCreature('d1', 'dolphin')]);
-    const dolphin = sim.actors[0]!;
+    syncSimulationCreatures(sim, [
+      makeCreature('d1', 'dolphin'),
+      makeCreature('j1', 'jellyfish'),
+      makeCreature('s1', 'squid'),
+      makeCreature('c1', 'crab'),
+      makeCreature('f1', 'clownfish'),
+    ]);
+    const dolphin = sim.actors.find((a) => a.id === 'd1')!;
     expect(dolphin.entryTimer).toBeGreaterThan(0);
 
-    tapCreature(sim, 'd1');
-    expect(dolphin.reactionTimer).toBeGreaterThan(0);
+    const tappedDolphin = tapCreature(sim, 'd1')!;
+    const tappedJellyfish = tapCreature(sim, 'j1')!;
+    const tappedSquid = tapCreature(sim, 's1')!;
+    const tappedCrab = tapCreature(sim, 'c1')!;
+    const tappedClownfish = tapCreature(sim, 'f1')!;
+
+    expect(tappedDolphin.reactionKind).toBe('leap');
+    expect(tappedDolphin.vy).toBeLessThan(-100);
+    expect(tappedJellyfish.reactionKind).toBe('glow');
+    expect(tappedSquid.reactionKind).toBe('ink-dash');
+    expect(tappedCrab.reactionKind).toBe('scuttle');
+    expect(tappedCrab.vy).toBe(0);
+    expect(tappedClownfish.reactionKind).toBe('dart');
 
     for (let i = 0; i < 90; i++) {
       stepAquariumSimulation(sim, 1 / 30);

@@ -27,6 +27,7 @@ interface AquariumCanvasProps {
 
 interface CreatureVisual {
   readonly id: string;
+  readonly isDemo: boolean;
   readonly container: Container;
   readonly plane: MeshPlane;
   readonly texWidth: number;
@@ -101,18 +102,29 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
     const creatureLayer = new Container();
     const fxLayer = new Container();
 
-    const seabedGfx = new Graphics();
+    const waterBackdropGfx = new Graphics();
     const feedGfx = new Graphics();
     feedLayer.addChild(feedGfx);
 
-    function spawnBubble(x: number, y: number, radius = 4 + Math.random() * 5, speed = 42): void {
-      if (bubbles.length > 60) return;
+    function spawnBubble(
+      x: number,
+      y: number,
+      radius = 4 + Math.random() * 5,
+      speed = 42,
+      tintColor = 0xe0f2fe,
+    ): void {
+      if (bubbles.length > 72) return;
       const g = new Graphics();
-      g.circle(0, 0, radius).stroke({ width: 1.5, color: 0xe0f2fe, alpha: 0.75 });
-      g.circle(-radius * 0.3, -radius * 0.3, Math.max(1.2, radius * 0.28)).fill({
-        color: 0xffffff,
-        alpha: 0.65,
-      });
+      if (tintColor === 0x1e293b) {
+        // Ink cloud puff for tapped squid
+        g.circle(0, 0, radius).fill({ color: 0x0f172a, alpha: 0.45 });
+      } else {
+        g.circle(0, 0, radius).stroke({ width: 1.5, color: tintColor, alpha: 0.78 });
+        g.circle(-radius * 0.3, -radius * 0.3, Math.max(1.2, radius * 0.28)).fill({
+          color: 0xffffff,
+          alpha: 0.65,
+        });
+      }
       g.position.set(x, y);
       fxLayer.addChild(g);
       bubbles.push({
@@ -162,7 +174,7 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
     }
 
     function rebuildDecor(w: number, h: number): void {
-      seabedGfx.clear();
+      waterBackdropGfx.clear();
       caustics.forEach((c) => c.destroy());
       caustics.length = 0;
       seaweeds.forEach((s) => s.gfx.destroy());
@@ -173,7 +185,7 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
       const steps = 6;
       const colors = [0x0ea5e9, 0x0284c7, 0x0369a1, 0x075985, 0x0c4a6e, 0x082f49];
       for (let i = 0; i < steps; i++) {
-        seabedGfx
+        waterBackdropGfx
           .rect(0, (h * i) / steps, w, h / steps + 2)
           .fill({ color: colors[i]!, alpha: 0.92 });
       }
@@ -191,7 +203,7 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
 
       // Sandy seabed
       const sandY = h * 0.86;
-      seabedGfx
+      waterBackdropGfx
         .moveTo(0, sandY + 12)
         .bezierCurveTo(w * 0.25, sandY - 14, w * 0.65, sandY + 16, w, sandY - 6)
         .lineTo(w, h)
@@ -199,7 +211,7 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
         .closePath()
         .fill(0xd6b06b);
 
-      seabedGfx
+      waterBackdropGfx
         .moveTo(0, sandY + 26)
         .bezierCurveTo(w * 0.35, sandY + 10, w * 0.72, sandY + 32, w, sandY + 18)
         .lineTo(w, h)
@@ -211,7 +223,7 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
       for (let i = 0; i < 7; i++) {
         const px = w * (0.08 + i * 0.14);
         const py = sandY + 24 + (i % 3) * 10;
-        seabedGfx.ellipse(px, py, 10 + (i % 3) * 4, 5).fill({ color: 0xb08b4f, alpha: 0.55 });
+        waterBackdropGfx.ellipse(px, py, 10 + (i % 3) * 4, 5).fill({ color: 0xb08b4f, alpha: 0.55 });
       }
 
       // Coral clusters
@@ -343,7 +355,8 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
       });
       nameTag.anchor.set(0.5, 1);
       nameTag.position.set(0, -(texH * baseScale) / 2 - 8);
-      nameTag.visible = false;
+      nameTag.visible = creature.isDemo;
+      nameTag.alpha = creature.isDemo ? 0.82 : 0;
 
       container.addChild(plane);
       container.addChild(nameTag);
@@ -351,20 +364,46 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
       container.cursor = 'pointer';
       container.on('pointertap', (e: FederatedPointerEvent) => {
         e.stopPropagation();
-        tapCreature(sim, creature.id);
+        const tapped = tapCreature(sim, creature.id);
         soundEngine.playCreatureTap();
         const vis = visuals.get(creature.id);
         if (vis) {
           vis.tagTimer = 2.4;
-          for (let i = 0; i < 4; i++) {
-            spawnBubble(vis.container.x + (Math.random() - 0.5) * 30, vis.container.y - 10, 5);
+          const cx = vis.container.x;
+          const cy = vis.container.y;
+          if (tapped?.reactionKind === 'ink-dash') {
+            for (let i = 0; i < 6; i++) {
+              spawnBubble(cx + (Math.random() - 0.5) * 34, cy + 8, 6 + Math.random() * 5, 26, 0x1e293b);
+            }
+            for (let i = 0; i < 3; i++) {
+              spawnBubble(cx + (Math.random() - 0.5) * 26, cy - 12, 4, 52);
+            }
+          } else if (tapped?.reactionKind === 'leap' || tapped?.reactionKind === 'glow') {
+            spawnRipple(cx, cy);
+            const tint = tapped.reactionKind === 'glow' ? 0x7dd3fc : 0xe0f2fe;
+            for (let i = 0; i < 6; i++) {
+              spawnBubble(cx + (Math.random() - 0.5) * 34, cy - 10, 5 + Math.random() * 3, 56, tint);
+            }
+          } else {
+            for (let i = 0; i < 5; i++) {
+              spawnBubble(cx + (Math.random() - 0.5) * 30, cy - 10, 4.5);
+            }
           }
         }
       });
 
+      const actor = sim.actors.find((a) => a.id === creature.id);
+      if (actor && !creature.isDemo && actor.entryTimer > 0) {
+        spawnRipple(actor.x, actor.y);
+        for (let i = 0; i < 8; i++) {
+          spawnBubble(actor.x + (Math.random() - 0.5) * 44, actor.y + (Math.random() - 0.5) * 18, 4 + Math.random() * 4, 52);
+        }
+      }
+
       creatureLayer.addChild(container);
       visuals.set(creature.id, {
         id: creature.id,
+        isDemo: creature.isDemo,
         container,
         plane,
         texWidth: texW,
@@ -414,7 +453,7 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
           return;
         }
         host.appendChild(app.canvas);
-        backdropLayer.addChild(seabedGfx);
+        backdropLayer.addChild(waterBackdropGfx);
         app.stage.addChild(backdropLayer, decorLayer, feedLayer, creatureLayer, fxLayer);
 
         app.stage.eventMode = 'static';
@@ -565,11 +604,24 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
               (-vis.texHeight * vis.baseScale * entryScale * reactPulse) / 2,
             );
 
+            let baseRot: number;
             if (spec.defaultFacing === 'front') {
-              vis.container.rotation = Math.max(-0.18, Math.min(0.18, actor.vx * 0.0022));
+              baseRot = Math.max(-0.18, Math.min(0.18, actor.vx * 0.0022));
             } else {
               const tilt = Math.max(-0.24, Math.min(0.24, actor.vy * 0.0028));
-              vis.container.rotation = actor.facingSign > 0 ? tilt : -tilt;
+              baseRot = actor.facingSign > 0 ? tilt : -tilt;
+            }
+            if (actor.reactionTimer > 0 && actor.reactionKind === 'leap') {
+              const spinProgress = 1 - Math.min(1, actor.reactionTimer / 1.3);
+              vis.container.rotation = baseRot + spinProgress * Math.PI * 2 * actor.facingSign;
+            } else {
+              vis.container.rotation = baseRot;
+            }
+
+            if (actor.reactionTimer > 0 && actor.reactionKind === 'glow') {
+              vis.plane.tint = Math.sin(actor.reactionTimer * 16) > 0 ? 0xa5f3fc : 0xfbcfe8;
+            } else if (vis.plane.tint !== 0xffffff) {
+              vis.plane.tint = 0xffffff;
             }
 
             const posAttr = vis.plane.geometry.getAttribute('aPosition');
@@ -591,10 +643,11 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
 
             if (vis.tagTimer > 0) {
               vis.tagTimer = Math.max(0, vis.tagTimer - dt);
-              vis.nameTag.visible = vis.tagTimer > 0;
-              vis.nameTag.alpha = Math.min(1, vis.tagTimer);
+              vis.nameTag.visible = vis.isDemo || vis.tagTimer > 0;
+              vis.nameTag.alpha = vis.isDemo ? Math.max(0.82, Math.min(1, vis.tagTimer)) : Math.min(1, vis.tagTimer);
             } else {
-              vis.nameTag.visible = false;
+              vis.nameTag.visible = vis.isDemo;
+              vis.nameTag.alpha = vis.isDemo ? 0.82 : 0;
             }
           }
         });
@@ -612,5 +665,5 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
     };
   }, []);
 
-  return <div ref={hostRef} className="aquarium-stage" />;
+  return <div ref={hostRef} className="aquarium-stage no-print" />;
 }

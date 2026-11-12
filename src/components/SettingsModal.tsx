@@ -47,7 +47,7 @@ export function SettingsModal({
               style={{ width: '100%', accentColor: '#38bdf8' }}
             />
             <p style={{ margin: '6px 0 0', fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>
-              同時在畫面游動的最大數量（{MIN_ACTIVE_CAPACITY}～{MAX_ACTIVE_CAPACITY} 隻）。超過時最舊的生物會自動回到圖鑑休息，不會刪除任何作品。
+              同時在畫面游動的在場上限（{MIN_ACTIVE_CAPACITY}～{MAX_ACTIVE_CAPACITY} 隻）。超過時最舊的生物會自動回到圖鑑休息，不會刪除任何作品。
             </p>
           </div>
 

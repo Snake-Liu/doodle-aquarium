@@ -34,6 +34,7 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,json,webmanifest}'],
+        globIgnores: ['**/*-canon-outline.png', '**/*-mask.png'],
       },
     }),
   ],

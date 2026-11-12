@@ -53,7 +53,7 @@ describe('Collection & Active Tank Capacity seam', () => {
     expect(rested?.isActive).toBe(false);
   });
 
-  it('supports toggling resting creatures back into tank, renaming, deleting, clearing demos, and shrinking capacity', () => {
+  it('supports toggling resting creatures back into aquarium, renaming, deleting, clearing demos, and shrinking capacity', () => {
     const store = createAquariumStore({
       activeCapacity: 10,
       demoCreatures: DEMO_SEEDS,

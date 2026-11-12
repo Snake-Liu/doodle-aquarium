@@ -52,4 +52,48 @@ describe('CollectionRepository IndexedDB seam', () => {
     expect(reloaded.creatures[0]?.name).toBe('藍海豚');
     expect(reloaded.creatures[1]?.isActive).toBe(false);
   });
+
+  it('handles QuotaExceededError gracefully without rejecting and preserves in-memory fallback', async () => {
+    const quotaError = Object.assign(new Error('Storage quota exceeded'), {
+      name: 'QuotaExceededError',
+    });
+    const fakeFactory = {
+      open() {
+        const req: Record<string, unknown> = {
+          result: {
+            objectStoreNames: { contains: () => true },
+            close: () => {},
+            transaction() {
+              const tx: Record<string, unknown> = {
+                error: quotaError,
+                objectStore() {
+                  return {
+                    put() {
+                      queueMicrotask(() => {
+                        (tx.onabort as (() => void) | undefined)?.();
+                      });
+                    },
+                  };
+                },
+              };
+              return tx;
+            },
+          },
+        };
+        queueMicrotask(() => {
+          (req.onsuccess as (() => void) | undefined)?.();
+        });
+        return req;
+      },
+    } as unknown as IDBFactory;
+
+    const repo = createIndexedDbRepository(fakeFactory, 'quota-test-db');
+    const result = await repo.saveState({
+      activeCapacity: 12,
+      demoCleared: false,
+      creatures: [],
+    });
+
+    expect(result).toEqual({ persisted: false, quotaExceeded: true });
+  });
 });

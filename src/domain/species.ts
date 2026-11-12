@@ -15,7 +15,6 @@ export type HabitatZone = 'upper-mid' | 'all-water' | 'mid-water' | 'seabed';
 export interface SpeciesSpec {
   readonly id: SpeciesId;
   readonly name: string;
-  readonly sourceImage: string;
   readonly outlineUrl: string;
   readonly defaultFacing: FacingDirection;
   readonly habitat: HabitatZone;
@@ -29,7 +28,6 @@ export const SPECIES_CATALOG: Record<SpeciesId, SpeciesSpec> = {
   dolphin: {
     id: 'dolphin',
     name: '海豚',
-    sourceImage: '1.png',
     outlineUrl: './templates/dolphin-outline.png',
     defaultFacing: 'left',
     habitat: 'upper-mid',
@@ -39,7 +37,6 @@ export const SPECIES_CATALOG: Record<SpeciesId, SpeciesSpec> = {
   jellyfish: {
     id: 'jellyfish',
     name: '水母',
-    sourceImage: '2.png',
     outlineUrl: './templates/jellyfish-outline.png',
     defaultFacing: 'front',
     habitat: 'all-water',
@@ -49,7 +46,6 @@ export const SPECIES_CATALOG: Record<SpeciesId, SpeciesSpec> = {
   squid: {
     id: 'squid',
     name: '烏賊',
-    sourceImage: '3.png',
     outlineUrl: './templates/squid-outline.png',
     defaultFacing: 'front',
     habitat: 'all-water',
@@ -59,7 +55,6 @@ export const SPECIES_CATALOG: Record<SpeciesId, SpeciesSpec> = {
   turtle: {
     id: 'turtle',
     name: '海龜',
-    sourceImage: '4.png',
     outlineUrl: './templates/turtle-outline.png',
     defaultFacing: 'right',
     habitat: 'mid-water',
@@ -69,7 +64,6 @@ export const SPECIES_CATALOG: Record<SpeciesId, SpeciesSpec> = {
   crab: {
     id: 'crab',
     name: '螃蟹',
-    sourceImage: '5.png',
     outlineUrl: './templates/crab-outline.png',
     defaultFacing: 'front',
     habitat: 'seabed',
@@ -79,7 +73,6 @@ export const SPECIES_CATALOG: Record<SpeciesId, SpeciesSpec> = {
   clownfish: {
     id: 'clownfish',
     name: '小丑魚',
-    sourceImage: '6.png',
     outlineUrl: './templates/clownfish-outline.png',
     defaultFacing: 'left',
     habitat: 'mid-water',

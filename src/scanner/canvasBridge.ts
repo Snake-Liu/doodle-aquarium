@@ -3,17 +3,40 @@ import { getSpeciesSpec, type SpeciesId } from '../domain/species';
 import type { MarineCreature } from '../aquarium/collectionStore';
 import { SHEET_LAYOUT } from '../scanner/sheetLayout';
 
+const MAX_STORED_TEXTURE_DIM = 288;
+
 export function rgbaImageToDataUrl(img: RgbaImage): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = img.width;
-  canvas.height = img.height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
+  const srcCanvas = document.createElement('canvas');
+  srcCanvas.width = img.width;
+  srcCanvas.height = img.height;
+  const srcCtx = srcCanvas.getContext('2d');
+  if (!srcCtx) {
     throw new Error('2D canvas context unavailable');
   }
   const imageData = new ImageData(new Uint8ClampedArray(img.data), img.width, img.height);
-  ctx.putImageData(imageData, 0, 0);
-  return canvas.toDataURL('image/png');
+  srcCtx.putImageData(imageData, 0, 0);
+
+  const scale = Math.min(1, MAX_STORED_TEXTURE_DIM / Math.max(img.width, img.height));
+  let targetCanvas = srcCanvas;
+  if (scale < 1) {
+    targetCanvas = document.createElement('canvas');
+    targetCanvas.width = Math.max(1, Math.round(img.width * scale));
+    targetCanvas.height = Math.max(1, Math.round(img.height * scale));
+    const dstCtx = targetCanvas.getContext('2d');
+    if (dstCtx) {
+      dstCtx.imageSmoothingEnabled = true;
+      dstCtx.imageSmoothingQuality = 'high';
+      dstCtx.drawImage(srcCanvas, 0, 0, targetCanvas.width, targetCanvas.height);
+    } else {
+      targetCanvas = srcCanvas;
+    }
+  }
+
+  const webpUrl = targetCanvas.toDataURL('image/webp', 0.86);
+  if (webpUrl.startsWith('data:image/webp')) {
+    return webpUrl;
+  }
+  return targetCanvas.toDataURL('image/png');
 }
 
 export function extractRgbaFromSource(
@@ -127,30 +150,9 @@ export async function renderPrintableSheetCanvas(speciesId: SpeciesId): Promise<
   ctx.save();
   ctx.translate(scanFrameX, scanFrameY);
 
-  drawMarkerOnCtx(
-    ctx,
-    SHEET_LAYOUT.markers.tl.x * s,
-    SHEET_LAYOUT.markers.tl.y * s,
-    SHEET_LAYOUT.markerSize * s,
-  );
-  drawMarkerOnCtx(
-    ctx,
-    SHEET_LAYOUT.markers.tr.x * s,
-    SHEET_LAYOUT.markers.tr.y * s,
-    SHEET_LAYOUT.markerSize * s,
-  );
-  drawMarkerOnCtx(
-    ctx,
-    SHEET_LAYOUT.markers.br.x * s,
-    SHEET_LAYOUT.markers.br.y * s,
-    SHEET_LAYOUT.markerSize * s,
-  );
-  drawMarkerOnCtx(
-    ctx,
-    SHEET_LAYOUT.markers.bl.x * s,
-    SHEET_LAYOUT.markers.bl.y * s,
-    SHEET_LAYOUT.markerSize * s,
-  );
+  for (const marker of Object.values(SHEET_LAYOUT.markers)) {
+    drawMarkerOnCtx(ctx, marker.x * s, marker.y * s, SHEET_LAYOUT.markerSize * s);
+  }
 
   const bits: readonly number[] = [
     ...SHEET_LAYOUT.barcode.startSync,

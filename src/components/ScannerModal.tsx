@@ -291,7 +291,7 @@ export function ScannerModal({ onClose, onConfirmCreature }: ScannerModalProps) 
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {!cameraError && (
                   <button type="button" className="btn primary" style={{ flex: 1 }} onClick={handleSnapNow}>
-                    📸 立即拍攝 / 手動微調
+                    📸 立即拍攝
                   </button>
                 )}
                 <button

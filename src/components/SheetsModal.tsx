@@ -145,6 +145,7 @@ export function SheetsModal({ onClose }: SheetsModalProps) {
 
       {printDataUrls && (
         <div
+          className="print-preview-root"
           style={{
             position: 'fixed',
             inset: 0,
@@ -178,6 +179,7 @@ export function SheetsModal({ onClose }: SheetsModalProps) {
           {printDataUrls.map((url, idx) => (
             <div
               key={idx}
+              className="print-sheet-page"
               style={{
                 pageBreakAfter: idx < printDataUrls.length - 1 ? 'always' : 'auto',
                 display: 'flex',

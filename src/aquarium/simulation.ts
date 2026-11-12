@@ -1,5 +1,7 @@
-import { getSpeciesSpec, type SpeciesId } from '../domain/species';
+import { getSpeciesSpec, type HabitatZone, type SpeciesId } from '../domain/species';
 import type { MarineCreature } from './collectionStore';
+
+export type TapReactionKind = 'leap' | 'glow' | 'ink-dash' | 'scuttle' | 'dart';
 
 export interface CreatureActor {
   readonly id: string;
@@ -14,6 +16,7 @@ export interface CreatureActor {
   phase: number;
   wanderTimer: number;
   reactionTimer: number;
+  reactionKind: TapReactionKind;
   entryTimer: number;
 }
 
@@ -48,46 +51,159 @@ function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
+const HABITAT_BANDS: Record<
+  HabitatZone,
+  { readonly minYRatio: number; readonly maxYRatio: number; readonly capAboveSeabed: boolean }
+> = {
+  'upper-mid': { minYRatio: 0.14, maxYRatio: 0.54, capAboveSeabed: true },
+  'mid-water': { minYRatio: 0.22, maxYRatio: 0.74, capAboveSeabed: true },
+  'all-water': { minYRatio: 0.14, maxYRatio: 0.76, capAboveSeabed: false },
+  seabed: { minYRatio: 0.83, maxYRatio: 0.91, capAboveSeabed: false },
+};
+
+interface SpeciesBehaviorSpec {
+  readonly baseSpeed: number;
+  readonly speedJitter: number;
+  readonly verticalRange: number;
+  readonly durationMin: number;
+  readonly durationJitter: number;
+  readonly phaseSpeed: number;
+  readonly chaseSpeed: number;
+  readonly seabedOnly: boolean;
+  readonly pauseChance: number;
+  readonly bobMode: 'none' | 'jellyfish' | 'squid';
+  readonly tapReaction: TapReactionKind;
+  readonly tapVxScale: number;
+  readonly tapVy: number;
+  readonly tapReactionDuration: number;
+}
+
+const SPECIES_BEHAVIOR: Record<SpeciesId, SpeciesBehaviorSpec> = {
+  dolphin: {
+    baseSpeed: 78,
+    speedJitter: 44,
+    verticalRange: 28,
+    durationMin: 2.5,
+    durationJitter: 2.5,
+    phaseSpeed: 5.8,
+    chaseSpeed: 120,
+    seabedOnly: false,
+    pauseChance: 0,
+    bobMode: 'none',
+    tapReaction: 'leap',
+    tapVxScale: 185,
+    tapVy: -145,
+    tapReactionDuration: 1.3,
+  },
+  turtle: {
+    baseSpeed: 38,
+    speedJitter: 22,
+    verticalRange: 18,
+    durationMin: 3,
+    durationJitter: 3,
+    phaseSpeed: 3.6,
+    chaseSpeed: 110,
+    seabedOnly: false,
+    pauseChance: 0,
+    bobMode: 'none',
+    tapReaction: 'dart',
+    tapVxScale: 125,
+    tapVy: -42,
+    tapReactionDuration: 1.2,
+  },
+  clownfish: {
+    baseSpeed: 56,
+    speedJitter: 36,
+    verticalRange: 32,
+    durationMin: 1.8,
+    durationJitter: 2,
+    phaseSpeed: 5.8,
+    chaseSpeed: 128,
+    seabedOnly: false,
+    pauseChance: 0,
+    bobMode: 'none',
+    tapReaction: 'dart',
+    tapVxScale: 190,
+    tapVy: -52,
+    tapReactionDuration: 1.15,
+  },
+  crab: {
+    baseSpeed: 34,
+    speedJitter: 24,
+    verticalRange: 0,
+    durationMin: 2,
+    durationJitter: 2,
+    phaseSpeed: 3.6,
+    chaseSpeed: 76,
+    seabedOnly: true,
+    pauseChance: 0.25,
+    bobMode: 'none',
+    tapReaction: 'scuttle',
+    tapVxScale: -145,
+    tapVy: 0,
+    tapReactionDuration: 1.15,
+  },
+  jellyfish: {
+    baseSpeed: 14,
+    speedJitter: 14,
+    verticalRange: 0,
+    durationMin: 2.5,
+    durationJitter: 2,
+    phaseSpeed: 3.6,
+    chaseSpeed: 55,
+    seabedOnly: false,
+    pauseChance: 0,
+    bobMode: 'jellyfish',
+    tapReaction: 'glow',
+    tapVxScale: 45,
+    tapVy: -125,
+    tapReactionDuration: 1.4,
+  },
+  squid: {
+    baseSpeed: 32,
+    speedJitter: 30,
+    verticalRange: 28,
+    durationMin: 1.6,
+    durationJitter: 1.8,
+    phaseSpeed: 3.6,
+    chaseSpeed: 120,
+    seabedOnly: false,
+    pauseChance: 0,
+    bobMode: 'squid',
+    tapReaction: 'ink-dash',
+    tapVxScale: -165,
+    tapVy: -135,
+    tapReactionDuration: 1.25,
+  },
+};
+
 function getHabitatBounds(speciesId: SpeciesId, width: number, height: number) {
   const padX = Math.min(72, width * 0.12);
   const minX = padX;
   const maxX = Math.max(padX + 10, width - padX);
   const seabedTop = height * 0.81;
   const seabedBottom = height * 0.91;
-
-  switch (speciesId) {
-    case 'crab':
-      return { minX, maxX, minY: height * 0.83, maxY: height * 0.91 };
-    case 'dolphin':
-      return { minX, maxX, minY: height * 0.14, maxY: Math.min(seabedTop - 20, height * 0.54) };
-    case 'turtle':
-      return { minX, maxX, minY: height * 0.2, maxY: Math.min(seabedTop - 20, height * 0.72) };
-    case 'clownfish':
-      return { minX, maxX, minY: height * 0.24, maxY: Math.min(seabedTop - 16, height * 0.76) };
-    case 'jellyfish':
-    case 'squid':
-      return { minX, maxX, minY: height * 0.14, maxY: Math.min(seabedBottom - 30, height * 0.76) };
-  }
+  const band = HABITAT_BANDS[getSpeciesSpec(speciesId).habitat];
+  const rawMaxY = height * band.maxYRatio;
+  return {
+    minX,
+    maxX,
+    minY: height * band.minYRatio,
+    maxY: band.capAboveSeabed ? Math.min(seabedTop - 20, rawMaxY) : Math.min(seabedBottom, rawMaxY),
+  };
 }
 
 function randomWanderVelocity(speciesId: SpeciesId): { vx: number; vy: number; duration: number } {
+  const b = SPECIES_BEHAVIOR[speciesId];
   const dir = Math.random() < 0.5 ? -1 : 1;
-  switch (speciesId) {
-    case 'dolphin':
-      return { vx: dir * (78 + Math.random() * 44), vy: (Math.random() - 0.5) * 28, duration: 2.5 + Math.random() * 2.5 };
-    case 'turtle':
-      return { vx: dir * (38 + Math.random() * 22), vy: (Math.random() - 0.5) * 18, duration: 3 + Math.random() * 3 };
-    case 'clownfish':
-      return { vx: dir * (56 + Math.random() * 36), vy: (Math.random() - 0.5) * 32, duration: 1.8 + Math.random() * 2 };
-    case 'crab': {
-      const pause = Math.random() < 0.25;
-      return { vx: pause ? 0 : dir * (34 + Math.random() * 24), vy: 0, duration: pause ? 0.9 + Math.random() : 2 + Math.random() * 2 };
-    }
-    case 'jellyfish':
-      return { vx: dir * (14 + Math.random() * 14), vy: -18, duration: 2.5 + Math.random() * 2 };
-    case 'squid':
-      return { vx: dir * (32 + Math.random() * 30), vy: (Math.random() - 0.5) * 28, duration: 1.6 + Math.random() * 1.8 };
+  if (b.pauseChance > 0 && Math.random() < b.pauseChance) {
+    return { vx: 0, vy: 0, duration: 0.9 + Math.random() };
   }
+  return {
+    vx: dir * (b.baseSpeed + Math.random() * b.speedJitter),
+    vy: b.bobMode === 'jellyfish' ? -18 : (Math.random() - 0.5) * b.verticalRange,
+    duration: b.durationMin + Math.random() * b.durationJitter,
+  };
 }
 
 export function createAquariumSimulation(width: number, height: number): AquariumSimulation {
@@ -117,6 +233,7 @@ export function syncSimulationCreatures(
     const bounds = getHabitatBounds(creature.speciesId, sim.width, sim.height);
     const wander = randomWanderVelocity(creature.speciesId);
     const spec = getSpeciesSpec(creature.speciesId);
+    const behavior = SPECIES_BEHAVIOR[creature.speciesId];
     const initialX = bounds.minX + Math.random() * Math.max(10, bounds.maxX - bounds.minX);
     const initialY = creature.isDemo
       ? bounds.minY + Math.random() * Math.max(10, bounds.maxY - bounds.minY)
@@ -142,6 +259,7 @@ export function syncSimulationCreatures(
       phase: Math.random() * Math.PI * 2,
       wanderTimer: wander.duration,
       reactionTimer: 0,
+      reactionKind: behavior.tapReaction,
       entryTimer: creature.isDemo ? 0 : 1.4,
     });
   }
@@ -171,19 +289,14 @@ export function dropFeed(sim: AquariumSimulation, x: number, y: number, count = 
 export function tapCreature(sim: AquariumSimulation, creatureId: string): CreatureActor | null {
   const actor = sim.actors.find((a) => a.id === creatureId);
   if (!actor) return null;
-  actor.reactionTimer = 1.25;
+  const behavior = SPECIES_BEHAVIOR[actor.speciesId];
   const dir = actor.vx >= 0 ? 1 : -1;
-  if (actor.speciesId === 'crab') {
-    actor.targetVx = -dir * 115;
-    actor.vx = actor.targetVx;
-  } else if (actor.speciesId === 'jellyfish' || actor.speciesId === 'squid') {
-    actor.targetVy = -95;
-    actor.vy = -110;
-  } else {
-    actor.targetVx = dir * 165;
-    actor.vx = actor.targetVx;
-    actor.vy = -38;
-  }
+  actor.reactionKind = behavior.tapReaction;
+  actor.reactionTimer = behavior.tapReactionDuration;
+  actor.targetVx = dir * behavior.tapVxScale;
+  actor.vx = actor.targetVx;
+  actor.vy = behavior.tapVy;
+  actor.targetVy = behavior.seabedOnly ? 0 : behavior.tapVy * 0.65;
   return actor;
 }
 
@@ -208,19 +321,20 @@ export function stepAquariumSimulation(sim: AquariumSimulation, dtRaw: number): 
   const eatenPositions: Array<{ x: number; y: number }> = [];
 
   for (const actor of sim.actors) {
+    const behavior = SPECIES_BEHAVIOR[actor.speciesId];
     const bounds = getHabitatBounds(actor.speciesId, sim.width, sim.height);
     actor.entryTimer = Math.max(0, actor.entryTimer - dt);
     actor.reactionTimer = Math.max(0, actor.reactionTimer - dt);
 
     const speedBoost = actor.reactionTimer > 0 ? 1.55 : 1;
-    actor.phase += dt * (actor.speciesId === 'dolphin' || actor.speciesId === 'clownfish' ? 5.8 : 3.6) * speedBoost;
+    actor.phase += dt * behavior.phaseSpeed * speedBoost;
 
     // Look for nearest reachable Fish Feed
     let nearestPellet: FeedPellet | null = null;
     let nearestDist = FEED_ATTRACT_RADIUS;
     for (const pellet of sim.pellets) {
       if (eatenIds.has(pellet.id)) continue;
-      if (actor.speciesId === 'crab' && pellet.y < sim.height * 0.72) continue;
+      if (behavior.seabedOnly && pellet.y < sim.height * 0.72) continue;
       const dist = Math.hypot(pellet.x - actor.x, pellet.y - actor.y);
       if (dist < nearestDist) {
         nearestDist = dist;
@@ -240,9 +354,8 @@ export function stepAquariumSimulation(sim: AquariumSimulation, dtRaw: number): 
         const dx = nearestPellet.x - actor.x;
         const dy = nearestPellet.y - actor.y;
         const len = Math.max(1, Math.hypot(dx, dy));
-        const chaseSpeed = actor.speciesId === 'crab' ? 76 : actor.speciesId === 'jellyfish' ? 55 : 120;
-        actor.targetVx = (dx / len) * chaseSpeed;
-        actor.targetVy = actor.speciesId === 'crab' ? 0 : (dy / len) * chaseSpeed;
+        actor.targetVx = (dx / len) * behavior.chaseSpeed;
+        actor.targetVy = behavior.seabedOnly ? 0 : (dy / len) * behavior.chaseSpeed;
       }
     } else {
       actor.wanderTimer -= dt;
@@ -253,10 +366,10 @@ export function stepAquariumSimulation(sim: AquariumSimulation, dtRaw: number): 
         actor.wanderTimer = w.duration;
       }
 
-      if (actor.speciesId === 'jellyfish') {
+      if (behavior.bobMode === 'jellyfish') {
         const pulse = Math.sin(actor.phase * 0.75);
         actor.targetVy = pulse > 0.25 ? -38 * pulse : 18;
-      } else if (actor.speciesId === 'squid') {
+      } else if (behavior.bobMode === 'squid') {
         const jet = Math.max(0, Math.sin(actor.phase * 0.9));
         actor.targetVy = jet > 0.4 ? -45 : 14;
       }

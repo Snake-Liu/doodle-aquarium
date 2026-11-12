@@ -68,6 +68,7 @@ export function App() {
   const [modal, setModal] = useState<ActiveModal>('none');
   const [muted, setMuted] = useState(false);
   const [showHint, setShowHint] = useState(true);
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setShowHint(false), 7500);
@@ -100,11 +101,19 @@ export function App() {
       mutate(store);
       const next = readSnapshot(store);
       setSnapshot(next);
-      void repo.saveState({
-        creatures: next.collectionCreatures,
-        activeCapacity: next.activeCapacity,
-        demoCleared: demoClearedRef.current,
-      });
+      void repo
+        .saveState({
+          creatures: next.collectionCreatures,
+          activeCapacity: next.activeCapacity,
+          demoCleared: demoClearedRef.current,
+        })
+        .then((res) => {
+          if (res.quotaExceeded) {
+            setStorageWarning('本機儲存空間已滿，部分新變更未能寫入，建議刪除部分舊作品後重試。');
+          } else {
+            setStorageWarning(null);
+          }
+        });
     },
     [repo],
   );
@@ -160,7 +169,17 @@ export function App() {
         </div>
       </header>
 
-      {showHint && modal === 'none' && (
+      {storageWarning && (
+        <div
+          className="hint-banner no-print"
+          style={{ top: 70, background: 'rgba(153, 27, 27, 0.92)', cursor: 'pointer' }}
+          onClick={() => setStorageWarning(null)}
+        >
+          {storageWarning}（點擊關閉）
+        </div>
+      )}
+
+      {showHint && !storageWarning && modal === 'none' && (
         <div className="hint-banner no-print">
           點空白水域撒魚飼料 · 點海洋生物或海星貝殼有驚喜 ✨
         </div>

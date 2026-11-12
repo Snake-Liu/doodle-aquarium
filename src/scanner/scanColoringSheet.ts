@@ -266,44 +266,55 @@ interface MarkerCandidate {
   hits: number;
 }
 
+const FINDER_STATE = {
+  WAIT_DARK: 0,
+  BLK_OUTER_1: 1,
+  WHT_INNER_1: 2,
+  BLK_CENTER: 3,
+  WHT_INNER_2: 4,
+  BLK_OUTER_2: 5,
+} as const;
+
+type FinderState = (typeof FINDER_STATE)[keyof typeof FINDER_STATE];
+
 function detectFinderCandidates(binary: Uint8Array, w: number, h: number): MarkerCandidate[] {
   const clusters: MarkerCandidate[] = [];
   const rowStep = w > 700 ? 2 : 1;
 
   for (let y = 0; y < h; y += rowStep) {
     const runs: [number, number, number, number, number] = [0, 0, 0, 0, 0];
-    let state = 0; // 0: wait dark, 1: b1, 2: w1, 3: bCenter, 4: w2, 5: b2
+    let state: FinderState = FINDER_STATE.WAIT_DARK;
 
     for (let x = 0; x <= w; x++) {
       const bit = x < w ? binary[y * w + x]! : 0;
-      if (state === 0) {
+      if (state === FINDER_STATE.WAIT_DARK) {
         if (bit === 1) {
           runs[0] = 1;
-          state = 1;
+          state = FINDER_STATE.BLK_OUTER_1;
         }
-      } else if (state === 1) {
+      } else if (state === FINDER_STATE.BLK_OUTER_1) {
         if (bit === 1) runs[0]++;
         else {
           runs[1] = 1;
-          state = 2;
+          state = FINDER_STATE.WHT_INNER_1;
         }
-      } else if (state === 2) {
+      } else if (state === FINDER_STATE.WHT_INNER_1) {
         if (bit === 0) runs[1]++;
         else {
           runs[2] = 1;
-          state = 3;
+          state = FINDER_STATE.BLK_CENTER;
         }
-      } else if (state === 3) {
+      } else if (state === FINDER_STATE.BLK_CENTER) {
         if (bit === 1) runs[2]++;
         else {
           runs[3] = 1;
-          state = 4;
+          state = FINDER_STATE.WHT_INNER_2;
         }
-      } else if (state === 4) {
+      } else if (state === FINDER_STATE.WHT_INNER_2) {
         if (bit === 0) runs[3]++;
         else {
           runs[4] = 1;
-          state = 5;
+          state = FINDER_STATE.BLK_OUTER_2;
         }
       } else {
         if (bit === 1 && x < w) {
@@ -338,9 +349,9 @@ function detectFinderCandidates(binary: Uint8Array, w: number, h: number): Marke
             runs[2] = runs[4];
             runs[3] = 1;
             runs[4] = 0;
-            state = 4;
+            state = FINDER_STATE.WHT_INNER_2;
           } else {
-            state = 0;
+            state = FINDER_STATE.WAIT_DARK;
           }
         }
       }

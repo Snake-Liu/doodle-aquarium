@@ -21,11 +21,3 @@ export function createRgbaImage(
   }
   return { width, height, data };
 }
-
-export function cloneRgbaImage(image: RgbaImage): RgbaImage {
-  return {
-    width: image.width,
-    height: image.height,
-    data: new Uint8ClampedArray(image.data),
-  };
-}

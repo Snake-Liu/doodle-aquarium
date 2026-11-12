@@ -26,6 +26,7 @@ export function CollectionModal({
   const [draftName, setDraftName] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [exportingId, setExportingId] = useState<string | null>(null);
+  const [previewCreature, setPreviewCreature] = useState<MarineCreature | null>(null);
 
   const collectedSet = new Set(collectedSpecies);
   const activeCount = creatures.filter((c) => c.isActive).length;
@@ -147,6 +148,16 @@ export function CollectionModal({
                     }}
                   >
                     <div
+                      role="button"
+                      tabIndex={0}
+                      title="點擊查看大圖"
+                      onClick={() => setPreviewCreature(c)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setPreviewCreature(c);
+                        }
+                      }}
                       style={{
                         height: 110,
                         borderRadius: 10,
@@ -156,6 +167,7 @@ export function CollectionModal({
                         justifyContent: 'center',
                         position: 'relative',
                         padding: 8,
+                        cursor: 'zoom-in',
                       }}
                     >
                       <img
@@ -163,6 +175,20 @@ export function CollectionModal({
                         alt={c.name}
                         style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
                       />
+                      <span
+                        style={{
+                          position: 'absolute',
+                          bottom: 6,
+                          left: 6,
+                          padding: '2px 7px',
+                          borderRadius: 999,
+                          fontSize: 10,
+                          background: 'rgba(2, 23, 38, 0.72)',
+                          color: '#bae6fd',
+                        }}
+                      >
+                        🔍 大圖
+                      </span>
                       <span
                         style={{
                           position: 'absolute',
@@ -279,6 +305,60 @@ export function CollectionModal({
           )}
         </div>
       </div>
+
+      {previewCreature && (
+        <div
+          className="modal-backdrop"
+          style={{ zIndex: 90 }}
+          onClick={() => setPreviewCreature(null)}
+        >
+          <div
+            className="modal-card"
+            style={{ maxWidth: 480 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2>
+                {previewCreature.name}（{getSpeciesSpec(previewCreature.speciesId).name}）
+              </h2>
+              <button type="button" className="btn" onClick={() => setPreviewCreature(null)}>
+                關閉
+              </button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+              <div
+                style={{
+                  width: '100%',
+                  height: 300,
+                  borderRadius: 14,
+                  background: 'linear-gradient(180deg, #0ea5e9 0%, #0369a1 55%, #082f49 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 18,
+                }}
+              >
+                <img
+                  src={previewCreature.textureUrl}
+                  alt={previewCreature.name}
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                />
+              </div>
+              <div style={{ fontSize: 13, color: '#bae6fd' }}>
+                建立日期：{new Date(previewCreature.createdAt).toLocaleString('zh-TW')}
+              </div>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={exportingId === previewCreature.id}
+                onClick={() => void handleSaveCard(previewCreature)}
+              >
+                {exportingId === previewCreature.id ? '製作中…' : '下載紀念小卡'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
