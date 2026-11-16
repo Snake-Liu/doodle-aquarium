@@ -23,6 +23,10 @@ import {
 
 interface AquariumCanvasProps {
   readonly creatures: readonly MarineCreature[];
+  readonly collectionCount: number;
+  readonly onOpenScanner: () => void;
+  readonly onOpenCollection: () => void;
+  readonly onOpenSheets: () => void;
 }
 
 interface CreatureVisual {
@@ -35,6 +39,40 @@ interface CreatureVisual {
   readonly baseScale: number;
   readonly nameTag: Text;
   tagTimer: number;
+}
+
+interface GardenEelItem {
+  readonly container: Container;
+  readonly bodyGfx: Graphics;
+  readonly baseX: number;
+  readonly baseY: number;
+  readonly maxHeight: number;
+  readonly species: 'spotted' | 'striped';
+  readonly phase: number;
+  currentHeight: number;
+  targetHeight: number;
+  speed: number;
+  stateTimer: number;
+  isHiding: boolean;
+}
+
+type FeatureFishKind = 'scanner' | 'collection' | 'sheets';
+
+interface FeatureFishItem {
+  readonly id: FeatureFishKind;
+  readonly container: Container;
+  readonly visualContainer: Container;
+  readonly bodyGfx: Graphics;
+  readonly haloGfx: Graphics;
+  readonly tagBg: Graphics;
+  readonly tagText: Text;
+  x: number;
+  y: number;
+  baseYRatio: number;
+  vx: number;
+  facingSign: 1 | -1;
+  phase: number;
+  spinTimer: number;
 }
 
 interface BubbleParticle {
@@ -63,15 +101,33 @@ interface SeaweedItem {
   exciteTimer: number;
 }
 
-export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
+export function AquariumCanvas({
+  creatures,
+  collectionCount,
+  onOpenScanner,
+  onOpenCollection,
+  onOpenSheets,
+}: AquariumCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const creaturesRef = useRef<readonly MarineCreature[]>(creatures);
   creaturesRef.current = creatures;
   const syncTriggerRef = useRef<(() => void) | null>(null);
 
+  const callbacksRef = useRef({ onOpenScanner, onOpenCollection, onOpenSheets });
+  callbacksRef.current = { onOpenScanner, onOpenCollection, onOpenSheets };
+
+  const collectionCountRef = useRef(collectionCount);
+  collectionCountRef.current = collectionCount;
+
+  const updateCollectionTagRef = useRef<((count: number) => void) | null>(null);
+
   useEffect(() => {
     syncTriggerRef.current?.();
   }, [creatures]);
+
+  useEffect(() => {
+    updateCollectionTagRef.current?.(collectionCount);
+  }, [collectionCount]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -96,10 +152,14 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
 
     const sim = createAquariumSimulation(host.clientWidth || 390, host.clientHeight || 700);
 
+    const gardenEels: GardenEelItem[] = [];
+    const featureFishList: FeatureFishItem[] = [];
+
     const backdropLayer = new Container();
     const decorLayer = new Container();
     const feedLayer = new Container();
     const creatureLayer = new Container();
+    const uiFishLayer = new Container();
     const fxLayer = new Container();
 
     const waterBackdropGfx = new Graphics();
@@ -171,6 +231,147 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
           .lineTo(x1 * scale, y1 * scale)
           .stroke({ width: 10 * scale, color: 0xfb7185, cap: 'round' });
       }
+    }
+
+    function drawGardenEel(
+      g: Graphics,
+      height: number,
+      sway: number,
+      species: 'spotted' | 'striped',
+    ): void {
+      g.clear();
+      if (height < 3) return;
+      const segs = 6;
+      const segH = height / segs;
+      const pts: Array<{ x: number; y: number }> = [{ x: 0, y: 0 }];
+      for (let s = 1; s <= segs; s++) {
+        const t = s / segs;
+        const curve = Math.sin(t * Math.PI * 0.9) * sway * t;
+        pts.push({ x: curve, y: -s * segH });
+      }
+
+      const bodyWidth = 10;
+      const mainColor = species === 'spotted' ? 0xfef9c3 : 0xf97316;
+
+      g.moveTo(pts[0]!.x, pts[0]!.y);
+      for (let s = 1; s <= segs; s++) {
+        g.lineTo(pts[s]!.x, pts[s]!.y);
+      }
+      g.stroke({ width: bodyWidth, color: mainColor, cap: 'round', join: 'round' });
+
+      if (species === 'striped') {
+        for (const idx of [2, 4]) {
+          const pt = pts[idx]!;
+          g.circle(pt.x, pt.y, bodyWidth * 0.52).fill(0xffffff);
+        }
+      } else {
+        const ptNeck = pts[4]!;
+        g.circle(ptNeck.x - 2, ptNeck.y, 2.2).fill(0x0f172a);
+        g.circle(ptNeck.x + 2, ptNeck.y, 1.8).fill(0x0f172a);
+        const ptMid = pts[2]!;
+        g.circle(ptMid.x, ptMid.y, 2).fill(0x0f172a);
+      }
+
+      const head = pts[segs]!;
+      g.circle(head.x, head.y, bodyWidth * 0.55).fill(mainColor);
+      const eyeOffset = 2.5;
+      g.circle(head.x - eyeOffset, head.y - 1, 2.2).fill(0x0f172a);
+      g.circle(head.x + eyeOffset, head.y - 1, 2.2).fill(0x0f172a);
+      g.circle(head.x - eyeOffset - 0.6, head.y - 1.6, 0.9).fill(0xffffff);
+      g.circle(head.x + eyeOffset - 0.6, head.y - 1.6, 0.9).fill(0xffffff);
+    }
+
+    function drawFeatureFishGfx(
+      bodyGfx: Graphics,
+      haloGfx: Graphics,
+      kind: FeatureFishKind,
+      phase: number,
+    ): void {
+      bodyGfx.clear();
+      haloGfx.clear();
+
+      const wag = Math.sin(phase * 4) * 5;
+
+      let bodyColor = 0xf59e0b;
+      let accentColor = 0x38bdf8;
+      let finColor = 0xd97706;
+      let haloColor = 0x38bdf8;
+
+      if (kind === 'scanner') {
+        bodyColor = 0xf59e0b;
+        accentColor = 0x38bdf8;
+        finColor = 0xd97706;
+        haloColor = 0x38bdf8;
+      } else if (kind === 'collection') {
+        bodyColor = 0x6366f1;
+        accentColor = 0xa855f7;
+        finColor = 0x4f46e5;
+        haloColor = 0x818cf8;
+      } else if (kind === 'sheets') {
+        bodyColor = 0x10b981;
+        accentColor = 0x06b6d4;
+        finColor = 0x059669;
+        haloColor = 0x34d399;
+      }
+
+      // Ambient aura halo
+      haloGfx
+        .ellipse(0, 0, 38, 22)
+        .fill({ color: haloColor, alpha: 0.18 + 0.08 * Math.sin(phase * 2.5) });
+
+      // Wagging tail fin
+      bodyGfx
+        .poly([-22, 0, -36, -13 + wag, -31, wag * 0.5, -36, 13 + wag])
+        .fill(finColor)
+        .stroke({ width: 1.5, color: accentColor, alpha: 0.8 });
+
+      // Dorsal fin (top)
+      bodyGfx
+        .poly([-8, -12, 4, -22, 14, -10])
+        .fill(accentColor)
+        .stroke({ width: 1.5, color: 0xffffff, alpha: 0.6 });
+
+      // Ventral fin (bottom)
+      bodyGfx
+        .poly([-4, 10, 4, 18, 12, 8])
+        .fill(finColor);
+
+      // Main fish body
+      bodyGfx
+        .moveTo(-22, 0)
+        .bezierCurveTo(-14, -15, 12, -15, 24, 0)
+        .bezierCurveTo(12, 15, -14, 15, -22, 0)
+        .closePath()
+        .fill(bodyColor)
+        .stroke({ width: 2, color: 0xffffff, alpha: 0.75 });
+
+      // Decorative gill accent
+      bodyGfx
+        .moveTo(-2, -10)
+        .quadraticCurveTo(8, 0, -2, 10)
+        .stroke({ width: 3, color: accentColor, cap: 'round' });
+
+      // Pectoral fin (fluttering)
+      const finFlap = Math.sin(phase * 3.5) * 3;
+      bodyGfx
+        .ellipse(2, 2 + finFlap * 0.5, 7, 4)
+        .fill(accentColor);
+
+      // Cartoon eye
+      bodyGfx.circle(14, -4, 5.5).fill(0xffffff).stroke({ width: 1, color: 0x0c4a6e });
+      bodyGfx.circle(15.5, -4, 3.2).fill(0x0f172a);
+      bodyGfx.circle(14.5, -5.2, 1.3).fill(0xffffff);
+    }
+
+    function updateTagBadge(tagBg: Graphics, tagText: Text): void {
+      tagBg.clear();
+      const textWidth = tagText.width;
+      const w = Math.max(52, textWidth + 18);
+      const h = 22;
+      tagBg
+        .roundRect(-w / 2, -h / 2, w, h, 999)
+        .fill({ color: 0x06243d, alpha: 0.88 })
+        .stroke({ width: 1.5, color: 0x7dd3fc, alpha: 0.75 });
     }
 
     function rebuildDecor(w: number, h: number): void {
@@ -305,7 +506,176 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
       shellContainer = shell;
       shellTopGfx = topShell;
       shellPearlGfx = pearl;
+
+      // Interactive Garden Eels (花園鰻)
+      gardenEels.forEach((e) => {
+        decorLayer.removeChild(e.container);
+        e.container.destroy({ children: true });
+      });
+      gardenEels.length = 0;
+
+      const eelConfigs = [
+        { xRatio: 0.18, species: 'spotted' as const, maxHeight: 62, phase: 0 },
+        { xRatio: 0.46, species: 'spotted' as const, maxHeight: 72, phase: 1.4 },
+        { xRatio: 0.52, species: 'striped' as const, maxHeight: 76, phase: 2.8 },
+        { xRatio: 0.80, species: 'striped' as const, maxHeight: 60, phase: 4.2 },
+      ];
+
+      for (const cfg of eelConfigs) {
+        const c = new Container();
+        const startY = sandY + 16;
+        c.position.set(w * cfg.xRatio, startY);
+        c.eventMode = 'static';
+        c.cursor = 'pointer';
+        const bodyGfx = new Graphics();
+        c.addChild(bodyGfx);
+
+        const item: GardenEelItem = {
+          container: c,
+          bodyGfx,
+          baseX: w * cfg.xRatio,
+          baseY: startY,
+          maxHeight: cfg.maxHeight * Math.max(0.75, Math.min(1.2, h / 600)),
+          species: cfg.species,
+          phase: cfg.phase,
+          currentHeight: cfg.maxHeight * 0.45,
+          targetHeight: cfg.maxHeight * 0.5,
+          speed: 24,
+          stateTimer: 1.5 + Math.random() * 2.5,
+          isHiding: false,
+        };
+
+        c.on('pointertap', (e: FederatedPointerEvent) => {
+          e.stopPropagation();
+          item.targetHeight = 0;
+          item.speed = 210;
+          item.isHiding = true;
+          item.stateTimer = 2.8 + Math.random() * 1.5;
+          soundEngine.playBubble(780);
+          for (let b = 0; b < 4; b++) {
+            spawnBubble(item.baseX + (Math.random() - 0.5) * 12, sandY + 4, 3.5, 30);
+          }
+        });
+
+        decorLayer.addChild(c);
+        gardenEels.push(item);
+      }
     }
+
+    function setupFeatureFish(w: number, h: number): void {
+      if (featureFishList.length > 0) return;
+
+      const fishConfigs: Array<{
+        id: FeatureFishKind;
+        label: string;
+        baseYRatio: number;
+        vx: number;
+        onActivate: () => void;
+      }> = [
+        {
+          id: 'scanner',
+          label: '📷 掃描',
+          baseYRatio: 0.22,
+          vx: 46,
+          onActivate: () => callbacksRef.current.onOpenScanner(),
+        },
+        {
+          id: 'collection',
+          label: `📖 圖鑑 (${collectionCountRef.current})`,
+          baseYRatio: 0.40,
+          vx: -42,
+          onActivate: () => callbacksRef.current.onOpenCollection(),
+        },
+        {
+          id: 'sheets',
+          label: '🖨️ 圖紙',
+          baseYRatio: 0.58,
+          vx: 44,
+          onActivate: () => callbacksRef.current.onOpenSheets(),
+        },
+      ];
+
+      for (let i = 0; i < fishConfigs.length; i++) {
+        const cfg = fishConfigs[i]!;
+        const c = new Container();
+        const startX = w * (0.2 + i * 0.28);
+        const startY = h * cfg.baseYRatio;
+        c.position.set(startX, startY);
+        c.eventMode = 'static';
+        c.cursor = 'pointer';
+
+        const haloGfx = new Graphics();
+        c.addChild(haloGfx);
+
+        const visualContainer = new Container();
+        const bodyGfx = new Graphics();
+        visualContainer.addChild(bodyGfx);
+        c.addChild(visualContainer);
+
+        const tagContainer = new Container();
+        tagContainer.position.set(0, 24);
+        const tagBg = new Graphics();
+        const tagText = new Text({
+          text: cfg.label,
+          style: {
+            fontFamily: '"Noto Sans TC", sans-serif',
+            fontSize: 12,
+            fontWeight: '700',
+            fill: 0xf8fafc,
+          },
+        });
+        tagText.anchor.set(0.5, 0.5);
+        tagContainer.addChild(tagBg, tagText);
+        c.addChild(tagContainer);
+        updateTagBadge(tagBg, tagText);
+
+        const item: FeatureFishItem = {
+          id: cfg.id,
+          container: c,
+          visualContainer,
+          bodyGfx,
+          haloGfx,
+          tagBg,
+          tagText,
+          x: startX,
+          y: startY,
+          baseYRatio: cfg.baseYRatio,
+          vx: cfg.vx,
+          facingSign: cfg.vx > 0 ? 1 : -1,
+          phase: i * 2.1,
+          spinTimer: 0,
+        };
+
+        c.on('pointertap', (e: FederatedPointerEvent) => {
+          e.stopPropagation();
+          item.spinTimer = 0.55;
+          soundEngine.playCreatureTap();
+          for (let b = 0; b < 5; b++) {
+            spawnBubble(item.x + (Math.random() - 0.5) * 24, item.y - 12, 4 + b, 55, 0x7dd3fc);
+          }
+          cfg.onActivate();
+        });
+
+        uiFishLayer.addChild(c);
+        featureFishList.push(item);
+      }
+    }
+
+    function repositionFeatureFish(w: number, h: number): void {
+      for (const fish of featureFishList) {
+        fish.x = Math.max(50, Math.min(w - 50, fish.x));
+        fish.y = h * fish.baseYRatio;
+        fish.container.position.set(fish.x, fish.y);
+      }
+    }
+
+    updateCollectionTagRef.current = (count: number) => {
+      const colFish = featureFishList.find((f) => f.id === 'collection');
+      if (colFish) {
+        colFish.tagText.text = `📖 圖鑑 (${count})`;
+        updateTagBadge(colFish.tagBg, colFish.tagText);
+      }
+    };
 
     async function ensureCreatureVisual(creature: MarineCreature): Promise<void> {
       if (destroyed || visuals.has(creature.id)) return;
@@ -454,7 +824,7 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
         }
         host.appendChild(app.canvas);
         backdropLayer.addChild(waterBackdropGfx);
-        app.stage.addChild(backdropLayer, decorLayer, feedLayer, creatureLayer, fxLayer);
+        app.stage.addChild(backdropLayer, decorLayer, feedLayer, creatureLayer, uiFishLayer, fxLayer);
 
         app.stage.eventMode = 'static';
         app.stage.hitArea = app.screen;
@@ -468,6 +838,7 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
         sim.width = app.screen.width;
         sim.height = app.screen.height;
         rebuildDecor(sim.width, sim.height);
+        setupFeatureFish(sim.width, sim.height);
         syncVisualsWithStore();
 
         resizeObserver = new ResizeObserver(() => {
@@ -477,6 +848,7 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
           sim.height = app.screen.height;
           app.stage.hitArea = app.screen;
           rebuildDecor(sim.width, sim.height);
+          repositionFeatureFish(sim.width, sim.height);
         });
         resizeObserver.observe(host);
 
@@ -531,6 +903,77 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
             shellTopGfx.y = -openAmt * 10;
             shellTopGfx.rotation = -openAmt * 0.25;
             shellPearlGfx.visible = openAmt > 0.15;
+          }
+
+          // Animate garden eels (隨機上升下降 + 水流搖曳)
+          for (const eel of gardenEels) {
+            eel.stateTimer -= dt;
+            if (eel.stateTimer <= 0) {
+              if (eel.isHiding) {
+                eel.isHiding = false;
+                eel.targetHeight = eel.maxHeight * (0.3 + Math.random() * 0.35);
+                eel.speed = 24 + Math.random() * 16;
+                eel.stateTimer = 1.8 + Math.random() * 2.2;
+              } else {
+                const r = Math.random();
+                if (r < 0.45) {
+                  // 探出較高看熱鬧
+                  eel.targetHeight = eel.maxHeight * (0.65 + Math.random() * 0.35);
+                } else if (r < 0.75) {
+                  // 中度高度悠閒搖曳
+                  eel.targetHeight = eel.maxHeight * (0.3 + Math.random() * 0.3);
+                } else {
+                  // 縮回低處或躲進沙裡
+                  eel.targetHeight = eel.maxHeight * (Math.random() < 0.5 ? 0 : 0.12);
+                }
+                eel.speed = 18 + Math.random() * 22;
+                eel.stateTimer = 2.5 + Math.random() * 3.5;
+              }
+            }
+
+            const diff = eel.targetHeight - eel.currentHeight;
+            const step = Math.sign(diff) * Math.min(Math.abs(diff), eel.speed * dt);
+            eel.currentHeight += step;
+
+            const sway = Math.sin(elapsed * 1.6 + eel.phase) * (eel.currentHeight * 0.14);
+            drawGardenEel(eel.bodyGfx, eel.currentHeight, sway, eel.species);
+          }
+
+          // Animate feature guide fish (功能小魚游動與互動)
+          const padX = 48;
+          for (const fish of featureFishList) {
+            fish.phase += dt * 3.2;
+            fish.x += fish.vx * dt;
+
+            // 邊界折返
+            if (fish.x < padX) {
+              fish.x = padX;
+              fish.vx = Math.abs(fish.vx);
+              fish.facingSign = 1;
+            } else if (fish.x > sim.width - padX) {
+              fish.x = sim.width - padX;
+              fish.vx = -Math.abs(fish.vx);
+              fish.facingSign = -1;
+            }
+
+            // 平緩上下波浪起伏
+            const bob = Math.sin(elapsed * 1.6 + fish.phase) * (sim.height * 0.028);
+            fish.y = sim.height * fish.baseYRatio + bob;
+            fish.container.position.set(fish.x, fish.y);
+
+            // 魚身隨朝向翻轉，標籤文字保持正向便於閱讀
+            fish.visualContainer.scale.x = fish.facingSign;
+
+            // 點擊旋轉歡呼特效
+            if (fish.spinTimer > 0) {
+              fish.spinTimer = Math.max(0, fish.spinTimer - dt);
+              const spinProgress = 1 - fish.spinTimer / 0.55;
+              fish.visualContainer.rotation = spinProgress * Math.PI * 2 * fish.facingSign;
+            } else {
+              fish.visualContainer.rotation = 0;
+            }
+
+            drawFeatureFishGfx(fish.bodyGfx, fish.haloGfx, fish.id, fish.phase);
           }
 
           // Ambient bubbles
@@ -656,6 +1099,7 @@ export function AquariumCanvas({ creatures }: AquariumCanvasProps) {
     return () => {
       destroyed = true;
       syncTriggerRef.current = null;
+      updateCollectionTagRef.current = null;
       resizeObserver?.disconnect();
       for (const tex of textureCache.values()) {
         tex.destroy(true);

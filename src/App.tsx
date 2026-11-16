@@ -138,7 +138,13 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <AquariumCanvas creatures={snapshot.activeCreatures} />
+      <AquariumCanvas
+        creatures={snapshot.activeCreatures}
+        collectionCount={snapshot.collectionCreatures.length}
+        onOpenScanner={() => setModal('scanner')}
+        onOpenCollection={() => setModal('collection')}
+        onOpenSheets={() => setModal('sheets')}
+      />
 
       <header className="hud-top no-print">
         <div className="hud-pill">
@@ -181,21 +187,9 @@ export function App() {
 
       {showHint && !storageWarning && modal === 'none' && (
         <div className="hint-banner no-print">
-          點空白水域撒魚飼料 · 點海洋生物或海星貝殼有驚喜 ✨
+          點水域撒魚飼料 · 點功能魚喚出功能視窗 · 點海星與花園鰻有驚喜 ✨
         </div>
       )}
-
-      <nav className="hud-bottom no-print" aria-label="主要功能">
-        <button type="button" className="nav-btn primary" onClick={() => setModal('scanner')}>
-          📷 掃描塗鴉
-        </button>
-        <button type="button" className="nav-btn" onClick={() => setModal('collection')}>
-          📖 圖鑑 ({snapshot.collectionCreatures.length})
-        </button>
-        <button type="button" className="nav-btn" onClick={() => setModal('sheets')}>
-          🖨️ 圖紙
-        </button>
-      </nav>
 
       {modal === 'scanner' && (
         <ScannerModal
