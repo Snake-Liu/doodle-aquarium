@@ -21,6 +21,43 @@ import {
   tapCreature,
 } from './simulation';
 
+function isFullscreen(): boolean {
+  if (typeof document === 'undefined') return false;
+  const doc = document as unknown as { fullscreenElement?: Element; webkitFullscreenElement?: Element };
+  return Boolean(doc.fullscreenElement || doc.webkitFullscreenElement);
+}
+
+function toggleFullscreen(): void {
+  if (typeof document === 'undefined') return;
+  const doc = document as unknown as {
+    fullscreenElement?: Element;
+    webkitFullscreenElement?: Element;
+    exitFullscreen?: () => Promise<void>;
+    webkitExitFullscreen?: () => Promise<void>;
+  };
+  const elem = document.documentElement as unknown as {
+    requestFullscreen?: () => Promise<void>;
+    webkitRequestFullscreen?: () => Promise<void>;
+  };
+  try {
+    if (isFullscreen()) {
+      if (typeof doc.exitFullscreen === 'function') {
+        void doc.exitFullscreen().catch(() => {});
+      } else if (typeof doc.webkitExitFullscreen === 'function') {
+        void doc.webkitExitFullscreen().catch(() => {});
+      }
+    } else {
+      if (typeof elem.requestFullscreen === 'function') {
+        void elem.requestFullscreen().catch(() => {});
+      } else if (typeof elem.webkitRequestFullscreen === 'function') {
+        void elem.webkitRequestFullscreen().catch(() => {});
+      }
+    }
+  } catch {
+    // Graceful fallback when browser restricts fullscreen
+  }
+}
+
 interface AquariumCanvasProps {
   readonly creatures: readonly MarineCreature[];
   readonly collectionCount: number;
@@ -56,7 +93,7 @@ interface GardenEelItem {
   isHiding: boolean;
 }
 
-type FeatureFishKind = 'scanner' | 'collection' | 'sheets';
+type FeatureFishKind = 'scanner' | 'collection' | 'sheets' | 'fullscreen';
 
 interface FeatureFishItem {
   readonly id: FeatureFishKind;
@@ -312,6 +349,11 @@ export function AquariumCanvas({
         accentColor = 0x06b6d4;
         finColor = 0x059669;
         haloColor = 0x34d399;
+      } else if (kind === 'fullscreen') {
+        bodyColor = 0xec4899;
+        accentColor = 0xfbcfe8;
+        finColor = 0xdb2777;
+        haloColor = 0xf472b6;
       }
 
       // Ambient aura halo
@@ -562,6 +604,20 @@ export function AquariumCanvas({
       }
     }
 
+    function updateFullscreenTag(): void {
+      const fsFish = featureFishList.find((f) => f.id === 'fullscreen');
+      if (fsFish) {
+        fsFish.tagText.text = isFullscreen() ? '🗗 視窗' : '⛶ 全螢幕';
+        updateTagBadge(fsFish.tagBg, fsFish.tagText);
+      }
+    }
+
+    const onFullscreenChange = () => {
+      updateFullscreenTag();
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
     function setupFeatureFish(w: number, h: number): void {
       if (featureFishList.length > 0) return;
 
@@ -573,23 +629,33 @@ export function AquariumCanvas({
         onActivate: () => void;
       }> = [
         {
+          id: 'fullscreen',
+          label: isFullscreen() ? '🗗 視窗' : '⛶ 全螢幕',
+          baseYRatio: 0.16,
+          vx: -40,
+          onActivate: () => {
+            toggleFullscreen();
+            window.setTimeout(updateFullscreenTag, 80);
+          },
+        },
+        {
           id: 'scanner',
           label: '📷 掃描',
-          baseYRatio: 0.22,
+          baseYRatio: 0.31,
           vx: 46,
           onActivate: () => callbacksRef.current.onOpenScanner(),
         },
         {
           id: 'collection',
           label: `📖 圖鑑 (${collectionCountRef.current})`,
-          baseYRatio: 0.40,
+          baseYRatio: 0.46,
           vx: -42,
           onActivate: () => callbacksRef.current.onOpenCollection(),
         },
         {
           id: 'sheets',
           label: '🖨️ 圖紙',
-          baseYRatio: 0.58,
+          baseYRatio: 0.61,
           vx: 44,
           onActivate: () => callbacksRef.current.onOpenSheets(),
         },
@@ -598,7 +664,7 @@ export function AquariumCanvas({
       for (let i = 0; i < fishConfigs.length; i++) {
         const cfg = fishConfigs[i]!;
         const c = new Container();
-        const startX = w * (0.2 + i * 0.28);
+        const startX = w * (0.16 + i * 0.22);
         const startY = h * cfg.baseYRatio;
         c.position.set(startX, startY);
         c.eventMode = 'static';
@@ -1098,6 +1164,8 @@ export function AquariumCanvas({
 
     return () => {
       destroyed = true;
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
       syncTriggerRef.current = null;
       updateCollectionTagRef.current = null;
       resizeObserver?.disconnect();

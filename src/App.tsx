@@ -187,7 +187,7 @@ export function App() {
 
       {showHint && !storageWarning && modal === 'none' && (
         <div className="hint-banner no-print">
-          點水域撒魚飼料 · 點功能魚喚出功能視窗 · 點海星與花園鰻有驚喜 ✨
+          點水域撒魚飼料 · 點功能魚喚出功能或切換全螢幕 · 點海星與花園鰻有驚喜 ✨
         </div>
       )}
 
